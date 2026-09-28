@@ -14,7 +14,7 @@
         content="Sales Operations Platform"
     >
 
-    <title>Dashboard plastic department</title>
+    <title>منصة عمليات المبيعات</title>
 
     <link
         rel="preconnect"
@@ -17669,6 +17669,42 @@ window.DashboardProfiles = (() => {
                     customer.creditLimit,
                     getCreditLimit(row)
                 );
+
+            /*
+             * آخر عملية شراء: لو العميل مالوش فاتورة في شيت
+             * Invoices، ناخد أحدث تاريخ فاتورة من شيت
+             * المستحقات والمتأخرات (والأحدث بينهم هو اللي يظهر)
+             */
+            const balanceInvoiceDate =
+                getValue(
+                    row,
+                    [
+                        "invoiceDate",
+                        "Invoice Date"
+                    ],
+                    ""
+                );
+
+            const balanceDate =
+                utils.parseDate(
+                    balanceInvoiceDate
+                );
+
+            const currentLastDate =
+                utils.parseDate(
+                    customer.lastPurchase
+                );
+
+            if (
+                balanceDate &&
+                (
+                    !currentLastDate ||
+                    balanceDate > currentLastDate
+                )
+            ) {
+                customer.lastPurchase =
+                    balanceInvoiceDate;
+            }
 
             /*
              * أقرب فاتورة مستحقة (لم تتأخر بعد):
