@@ -5051,6 +5051,36 @@ html[dir="rtl"] #salesIntelligencePage .intelligence-card .card-header::before {
                                 </strong>
                             </article>
 
+                            <article class="profile-kpi-card">
+                                <span data-i18n="salesmanProfiles.yearCustomers">
+                                    إجمالي العملاء من أول السنة
+                                </span>
+
+                                <strong id="profileYearCustomerCount">
+                                    0
+                                </strong>
+                            </article>
+
+                            <article class="profile-kpi-card">
+                                <span data-i18n="salesmanProfiles.soldCustomers">
+                                    العملاء المباع لهم في الفترة
+                                </span>
+
+                                <strong id="profileSoldCustomerCount">
+                                    0
+                                </strong>
+                            </article>
+
+                            <article class="profile-kpi-card">
+                                <span data-i18n="salesmanProfiles.soldCustomersRate">
+                                    نسبة العملاء المباع لهم
+                                </span>
+
+                                <strong id="profileSoldCustomerRate">
+                                    0%
+                                </strong>
+                            </article>
+
                         </div>
 
 
@@ -5239,8 +5269,16 @@ html[dir="rtl"] #salesIntelligencePage .intelligence-card .card-header::before {
                                                 أيام التأخير
                                             </th>
 
+                                            <th data-i18n="salesmanProfiles.dueDays">
+                                                أيام الاستحقاق
+                                            </th>
+
                                             <th data-i18n="salesmanProfiles.creditLimit">
                                                 الحد الائتماني
+                                            </th>
+
+                                            <th data-i18n="salesmanProfiles.nextInvoice">
+                                                الفاتورة القادمة
                                             </th>
 
                                             <th data-i18n="salesmanProfiles.customerStatus">
@@ -5934,6 +5972,9 @@ const TRANSLATIONS = {
             achievement: "تحقيق الهدف",
             invoiceCount: "عدد الفواتير",
             customerCount: "عدد العملاء",
+            yearCustomers: "إجمالي العملاء من أول السنة",
+            soldCustomers: "العملاء المباع لهم في الفترة",
+            soldCustomersRate: "نسبة العملاء المباع لهم",
             averageInvoice: "متوسط الفاتورة",
             customerCode: "كود العميل",
             customerName: "اسم العميل",
@@ -5948,6 +5989,10 @@ const TRANSLATIONS = {
             active: "نشط",
             inactive: "غير نشط",
             overdueCustomer: "متأخر",
+            dueCustomer: "مستحق",
+            dueActiveCustomer: "مستحق ونشط",
+            dueDays: "أيام الاستحقاق",
+            nextInvoice: "الفاتورة القادمة",
             overCreditLimit: "متجاوز الحد الائتماني",
             viewProfile: "عرض الملف",
             comprehensiveReport: "التقرير الشامل لأداء المندوب",
@@ -6231,6 +6276,9 @@ const TRANSLATIONS = {
             achievement: "Achievement",
             invoiceCount: "Invoice Count",
             customerCount: "Customer Count",
+            yearCustomers: "Total Customers (YTD)",
+            soldCustomers: "Customers Sold (Period)",
+            soldCustomersRate: "Sold Customers Rate",
             averageInvoice: "Average Invoice",
             customerCode: "Customer Code",
             customerName: "Customer Name",
@@ -6245,6 +6293,10 @@ const TRANSLATIONS = {
             active: "Active",
             inactive: "Inactive",
             overdueCustomer: "Overdue",
+            dueCustomer: "Due",
+            dueActiveCustomer: "Due & Active",
+            dueDays: "Due Days",
+            nextInvoice: "Next Invoice",
             overCreditLimit: "Over Credit Limit",
             viewProfile: "View Profile",
             comprehensiveReport: "Comprehensive Salesman Performance Report",
@@ -17099,6 +17151,105 @@ window.DashboardProfiles = (() => {
         return alerts;
     }
 
+    /*
+     * تغطية العملاء:
+     * - إجمالي العملاء من أول السنة = العملاء المختلفين اللي اتباع لهم
+     *   من 1 يناير لحد نهاية الفترة المختارة
+     * - العملاء المباع لهم = العملاء المختلفين اللي ليهم فواتير في الفترة المختارة
+     * - النسبة = المباع لهم ÷ إجمالي العملاء من أول السنة
+     */
+    function getPeriodEndDate() {
+        const dateTo = utils.parseDate(
+            currentFilters.dateTo
+        );
+
+        if (dateTo) {
+            return dateTo;
+        }
+
+        return getReferenceDate();
+    }
+
+    function buildCustomerCoverage(
+        code,
+        periodInvoices
+    ) {
+        const endDate = getPeriodEndDate();
+
+        const bounds = {
+            start: new Date(
+                endDate.getFullYear(),
+                0,
+                1,
+                0,
+                0,
+                0,
+                0
+            ),
+            end: new Date(
+                endDate.getFullYear(),
+                endDate.getMonth(),
+                endDate.getDate(),
+                23,
+                59,
+                59,
+                999
+            )
+        };
+
+        const sourceRows =
+            rawInvoiceRows.length
+                ? rawInvoiceRows
+                : invoiceRows;
+
+        const yearCustomers = new Set();
+
+        sourceRows.forEach(row => {
+            if (
+                getRowSalesmanCode(row) !== code
+            ) {
+                return;
+            }
+
+            const customerCode =
+                getCustomerCode(row);
+
+            if (
+                customerCode &&
+                isDateWithinBounds(
+                    getInvoiceDate(row),
+                    bounds
+                )
+            ) {
+                yearCustomers.add(customerCode);
+            }
+        });
+
+        const soldCustomers = new Set();
+
+        periodInvoices.forEach(row => {
+            const customerCode =
+                getCustomerCode(row);
+
+            if (customerCode) {
+                soldCustomers.add(customerCode);
+                yearCustomers.add(customerCode);
+            }
+        });
+
+        const yearCount = yearCustomers.size;
+        const soldCount = soldCustomers.size;
+
+        return {
+            yearCustomerCount: yearCount,
+            soldCustomerCount: soldCount,
+            soldCustomerRate:
+                yearCount > 0
+                    ? (soldCount / yearCount) * 100
+                    : 0
+        };
+    }
+
     function buildProfile(code) {
         const targetRow =
             targetRows.find(
@@ -17226,11 +17377,17 @@ window.DashboardProfiles = (() => {
             invoiceCount:
                 invoices.length,
 
+            ...buildCustomerCoverage(
+                code,
+                invoices
+            ),
+
             customers:
                 buildCustomers(
                     invoices,
                     collections,
-                    balances
+                    balances,
+                    code
                 ),
 
             monthly:
@@ -17252,10 +17409,130 @@ window.DashboardProfiles = (() => {
         return profile;
     }
 
+    function getDaysToDue(row) {
+        const supplied = getValue(
+            row,
+            ["daysToDue"],
+            null
+        );
+
+        if (
+            supplied !== null &&
+            supplied !== ""
+        ) {
+            return Math.max(
+                0,
+                utils.toNumber(supplied)
+            );
+        }
+
+        const dueDate = utils.parseDate(
+            getValue(
+                row,
+                ["dueDate", "Due Date"],
+                ""
+            )
+        );
+
+        if (!dueDate) {
+            return null;
+        }
+
+        const today = new Date();
+
+        const todayUtc = Date.UTC(
+            today.getFullYear(),
+            today.getMonth(),
+            today.getDate()
+        );
+
+        const dueUtc = Date.UTC(
+            dueDate.getFullYear(),
+            dueDate.getMonth(),
+            dueDate.getDate()
+        );
+
+        return Math.max(
+            0,
+            Math.round(
+                (dueUtc - todayUtc) /
+                    86400000
+            )
+        );
+    }
+
+    /*
+     * حالة العميل:
+     * overdue      = عليه متأخرات
+     * dueActive    = عليه مستحقات واشترى في الفترة
+     * due          = عليه مستحقات ولم يشترِ في الفترة
+     * active       = اشترى في الفترة بدون أرصدة
+     * inactive     = لم يشترِ في الفترة وليس عليه أرصدة
+     */
+    function getCustomerStatus(customer) {
+        if (customer.overdue > 0) {
+            return "overdue";
+        }
+
+        if (customer.due > 0) {
+            return customer.sales > 0
+                ? "dueActive"
+                : "due";
+        }
+
+        return customer.sales > 0
+            ? "active"
+            : "inactive";
+    }
+
+    const CUSTOMER_STATUS_INFO = {
+        overdue: {
+            key: "salesmanProfiles.overdueCustomer",
+            ar: "متأخر",
+            en: "Overdue",
+            className: "status-danger"
+        },
+        dueActive: {
+            key: "salesmanProfiles.dueActiveCustomer",
+            ar: "مستحق ونشط",
+            en: "Due & Active",
+            className: "status-info"
+        },
+        due: {
+            key: "salesmanProfiles.dueCustomer",
+            ar: "مستحق",
+            en: "Due",
+            className: "status-warning"
+        },
+        active: {
+            key: "salesmanProfiles.active",
+            ar: "نشط",
+            en: "Active",
+            className: "status-success"
+        },
+        inactive: {
+            key: "salesmanProfiles.inactive",
+            ar: "غير نشط",
+            en: "Inactive",
+            className: "status-neutral"
+        }
+    };
+
+    function getCustomerStatusInfo(customer) {
+        return (
+            CUSTOMER_STATUS_INFO[
+                customer.status ||
+                    getCustomerStatus(customer)
+            ] ||
+            CUSTOMER_STATUS_INFO.inactive
+        );
+    }
+
     function buildCustomers(
         invoices,
         collections,
-        balances
+        balances,
+        salesmanCode = ""
     ) {
         const customerMap = new Map();
 
@@ -17283,6 +17560,8 @@ window.DashboardProfiles = (() => {
                     due: 0,
                     overdue: 0,
                     overdueDays: 0,
+                    dueDays: null,
+                    nextInvoice: "",
                     creditLimit: 0
                 });
             }
@@ -17390,6 +17669,121 @@ window.DashboardProfiles = (() => {
                     customer.creditLimit,
                     getCreditLimit(row)
                 );
+
+            /*
+             * أقرب فاتورة مستحقة (لم تتأخر بعد):
+             * أيام الاستحقاق = الأيام المتبقية لأقرب تاريخ استحقاق
+             * الفاتورة القادمة = رقم تلك الفاتورة
+             */
+            if (
+                getStatus(row) === "due" &&
+                balance > 0
+            ) {
+                const daysLeft =
+                    getDaysToDue(row);
+
+                if (
+                    daysLeft !== null &&
+                    (
+                        customer.dueDays === null ||
+                        daysLeft < customer.dueDays
+                    )
+                ) {
+                    customer.dueDays =
+                        daysLeft;
+
+                    customer.nextInvoice =
+                        String(
+                            getValue(
+                                row,
+                                [
+                                    "invoiceNo",
+                                    "invoiceNumber",
+                                    "Invoice Number"
+                                ],
+                                ""
+                            )
+                        ).trim();
+                }
+            }
+        });
+
+        /*
+         * آخر عملية شراء = آخر فاتورة للعميل مع هذا المندوب
+         * على مستوى كل البيانات (مش الفترة المختارة بس)
+         */
+        if (salesmanCode) {
+            const lastPurchaseMap = new Map();
+
+            (
+                rawInvoiceRows.length
+                    ? rawInvoiceRows
+                    : invoiceRows
+            ).forEach(row => {
+                if (
+                    getRowSalesmanCode(row) !==
+                    salesmanCode
+                ) {
+                    return;
+                }
+
+                const customerCode =
+                    getCustomerCode(row);
+
+                const invoiceDate =
+                    getInvoiceDate(row);
+
+                const candidate =
+                    utils.parseDate(invoiceDate);
+
+                if (!customerCode || !candidate) {
+                    return;
+                }
+
+                const current =
+                    lastPurchaseMap.get(customerCode);
+
+                if (
+                    !current ||
+                    candidate > current.date
+                ) {
+                    lastPurchaseMap.set(
+                        customerCode,
+                        {
+                            date: candidate,
+                            value: invoiceDate
+                        }
+                    );
+                }
+            });
+
+            customerMap.forEach(customer => {
+                const found =
+                    lastPurchaseMap.get(
+                        customer.customerCode
+                    );
+
+                const current =
+                    utils.parseDate(
+                        customer.lastPurchase
+                    );
+
+                if (
+                    found &&
+                    (
+                        !current ||
+                        found.date > current
+                    )
+                ) {
+                    customer.lastPurchase =
+                        found.value;
+                }
+            });
+        }
+
+        customerMap.forEach(customer => {
+            customer.status =
+                getCustomerStatus(customer);
         });
 
         return Array.from(
@@ -17426,7 +17820,8 @@ window.DashboardProfiles = (() => {
                     customer.sales,
                     customer.collections,
                     customer.due,
-                    customer.overdue
+                    customer.overdue,
+                    customer.nextInvoice
                 ].some(value =>
                     utils
                         .normalizeText(value)
@@ -17504,6 +17899,27 @@ window.DashboardProfiles = (() => {
             "profileCustomerCount",
             utils.formatNumber(
                 profile.customers.length
+            )
+        );
+
+        utils.setText(
+            "profileYearCustomerCount",
+            utils.formatNumber(
+                profile.yearCustomerCount
+            )
+        );
+
+        utils.setText(
+            "profileSoldCustomerCount",
+            utils.formatNumber(
+                profile.soldCustomerCount
+            )
+        );
+
+        utils.setText(
+            "profileSoldCustomerRate",
+            utils.formatPercentage(
+                profile.soldCustomerRate
             )
         );
     }
@@ -17738,9 +18154,36 @@ window.DashboardProfiles = (() => {
         );
     }
 
-    function createCustomerRow(customer) {
-        const hasOverdue =
-            customer.overdue > 0;
+    function formatOptionalDays(value, show) {
+        return show &&
+            value !== null &&
+            value !== undefined
+            ? utils.formatNumber(value)
+            : "--";
+    }
+
+    function createCustomerRow(
+        customer,
+        options = {}
+    ) {
+        const forPrint =
+            options.forPrint === true;
+
+        const statusInfo =
+            getCustomerStatusInfo(customer);
+
+        const statusLabel = forPrint
+            ? statusInfo.en
+            : utils.t(
+                  statusInfo.key,
+                  statusInfo.ar
+              );
+
+        const statusCell = forPrint
+            ? utils.escapeHTML(statusLabel)
+            : `<span class="status-badge ${statusInfo.className}">
+                   ${utils.escapeHTML(statusLabel)}
+               </span>`;
 
         return `
             <tr>
@@ -17759,9 +18202,13 @@ window.DashboardProfiles = (() => {
                 </td>
 
                 <td>
-                    ${utils.formatDate(
+                    ${
                         customer.lastPurchase
-                    )}
+                            ? utils.formatDate(
+                                  customer.lastPurchase
+                              )
+                            : "--"
+                    }
                 </td>
 
                 <td>
@@ -17789,8 +18236,16 @@ window.DashboardProfiles = (() => {
                 </td>
 
                 <td>
-                    ${utils.formatNumber(
-                        customer.overdueDays
+                    ${formatOptionalDays(
+                        customer.overdueDays,
+                        customer.overdue > 0
+                    )}
+                </td>
+
+                <td>
+                    ${formatOptionalDays(
+                        customer.dueDays,
+                        customer.due > 0
                     )}
                 </td>
 
@@ -17801,23 +18256,16 @@ window.DashboardProfiles = (() => {
                 </td>
 
                 <td>
-                    <span class="status-badge ${
-                        hasOverdue
-                            ? "status-warning"
-                            : "status-success"
-                    }">
-                        ${utils.escapeHTML(
-                            hasOverdue
-                                ? utils.t(
-                                      "salesmanProfiles.overdueCustomer",
-                                      "متأخر"
-                                  )
-                                : utils.t(
-                                      "salesmanProfiles.active",
-                                      "نشط"
-                                  )
-                        )}
-                    </span>
+                    ${utils.escapeHTML(
+                        customer.due > 0 &&
+                            customer.nextInvoice
+                            ? customer.nextInvoice
+                            : "--"
+                    )}
+                </td>
+
+                <td>
+                    ${statusCell}
                 </td>
             </tr>
         `;
@@ -17845,7 +18293,7 @@ window.DashboardProfiles = (() => {
                       )
                       .join("")
                 : utils.emptyTableRow(
-                      10,
+                      12,
                       utils.t(
                           "common.noData",
                           "لا توجد بيانات متاحة"
@@ -17917,15 +18365,29 @@ window.DashboardProfiles = (() => {
                     customer.overdue,
 
                 "Overdue Days":
-                    customer.overdueDays,
+                    customer.overdue > 0
+                        ? customer.overdueDays
+                        : "--",
+
+                "Due Days":
+                    customer.due > 0 &&
+                    customer.dueDays !== null
+                        ? customer.dueDays
+                        : "--",
 
                 "Credit Limit":
                     customer.creditLimit,
 
+                "Next Invoice":
+                    customer.due > 0 &&
+                    customer.nextInvoice
+                        ? customer.nextInvoice
+                        : "--",
+
                 Status:
-                    customer.overdue > 0
-                        ? "Overdue"
-                        : "Active"
+                    getCustomerStatusInfo(
+                        customer
+                    ).en
             })
         );
     }
@@ -17975,7 +18437,12 @@ window.DashboardProfiles = (() => {
             );
 
         const bodyRows = rows
-            .map(createCustomerRow)
+            .map(customer =>
+                createCustomerRow(
+                    customer,
+                    { forPrint: true }
+                )
+            )
             .join("");
 
         const logoSrc =
@@ -18292,6 +18759,27 @@ window.DashboardProfiles = (() => {
                                 .length
                         )}
                     </div>
+
+                    <div>
+                        Total Customers (YTD):
+                        ${utils.formatNumber(
+                            profile.yearCustomerCount
+                        )}
+                    </div>
+
+                    <div>
+                        Customers Sold (Period):
+                        ${utils.formatNumber(
+                            profile.soldCustomerCount
+                        )}
+                    </div>
+
+                    <div>
+                        Sold Customers Rate:
+                        ${utils.formatPercentage(
+                            profile.soldCustomerRate
+                        )}
+                    </div>
                 </div>
 
                 <p style="color:#94a3b8; font-size:11px; margin-top:0;">
@@ -18454,7 +18942,9 @@ window.DashboardProfiles = (() => {
                             <th>Due</th>
                             <th>Overdue</th>
                             <th>Overdue Days</th>
+                            <th>Due Days</th>
                             <th>Credit Limit</th>
+                            <th>Next Invoice</th>
                             <th>Status</th>
                         </tr>
                     </thead>
